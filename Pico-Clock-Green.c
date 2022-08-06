@@ -239,6 +239,9 @@
 /* Make selective choices of some options for release version. */
 #define RELEASE_VERSION
 
+/* Skip the animations and messages on start-up and go immediately to showing the time. */
+//#define QUICK_START
+
 /* Firmware version. */
 #define FIRMWARE_VERSION    "5.00"
 
@@ -288,6 +291,9 @@
    >>> WARNING <<< See text in the user guide about DHT22. */
 #define DHT22_SUPPORT                 // if a DHT22 outside temperature and humidity sensor has been installed by user.
 #define BME280_SUPPORT                // if a BME280 outside temperature, humidity and barometric pressure sensor has been installed by user.
+//#define DHT22_EXT_SUPPORT             // Using using external DHT22, required DHT22_SUPPORT
+#define BME280_EXT_SUPPORT            // Using using external BME280, required BME280_SUPPORT
+//#define DS3231_SUPPORT                // Read ambient temperature from DS3231 real-time clock ic integrated in the Pico Green Clock
 
 /* Support of an optional remote control to interact with the clock remotely, for example when the clock
    is out of reach. There is no remote control provided with the clock. It must be bought by the user.
@@ -943,7 +949,9 @@ UCHAR DayName[3][8][10] =
 
 
 struct alarm Alarm[2];  // current settings for alarm 0 and alarm 1.
+#ifdef BME280_SUPPORT
 struct bme280_calib_param Bme280CalibParam;
+#endif
 struct sound SoundQueue[MAX_SOUND_QUEUE];
 struct repeating_timer Timer50uSec;
 
@@ -1497,15 +1505,19 @@ int main(void)
   /* ---------------------------------------------------------------- *\
                       Test clock LED matrix.
   \* ---------------------------------------------------------------- */
+#ifndef QUICK_START
   matrix_test();
+#endif
 
 
 
   /* ---------------------------------------------------------------- *\
            Make some pixel animation on entry (just for fun).
   \* ---------------------------------------------------------------- */
+#ifndef QUICK_START
   pixel_twinkling(3);
   clear_framebuffer(0);
+#endif
 
 
 
@@ -1661,8 +1673,10 @@ int main(void)
   /* ---------------------------------------------------------------- *\
                         Scroll firmware version.
   \* ---------------------------------------------------------------- */
+#ifndef QUICK_START
   sprintf(String, "Pico Green Clock - Firmware Version %s", FIRMWARE_VERSION);
   scroll_string(24, String);
+#endif
 
 
 
@@ -1765,7 +1779,9 @@ int main(void)
             NOTE: Scroll queue will be processed when entering
                       the main program loop below.
   \* ---------------------------------------------------------------- */
+#ifndef QUICK_START
   scroll_queue(TAG_PICO_UNIQUE_ID);
+#endif
 
 
 
@@ -1774,7 +1790,9 @@ int main(void)
             NOTE: Scroll queue will be processed when entering
                       the main program loop below.
   \* ---------------------------------------------------------------- */
+#ifndef QUICK_START
   scroll_queue(TAG_DST);
+#endif
 
 
 
@@ -1783,7 +1801,9 @@ int main(void)
            NOTE: Scroll queue will be processed when entering
                       the main program loop below.
   \* ---------------------------------------------------------------- */
+#ifndef QUICK_START
   scroll_queue(TAG_VOLTAGE);
+#endif
 
 
 
@@ -1792,13 +1812,16 @@ int main(void)
             NOTE: Scroll queue will be processed when entering
                       the main program loop below.
   \* ---------------------------------------------------------------- */
+#ifndef QUICK_START
   scroll_queue(TAG_PICO_TEMP);
+#endif
 
 
 
   /* ---------------------------------------------------------------- *\
                        Test passive buzzer.
   \* ---------------------------------------------------------------- */
+#ifdef PASSIVE_PIEZO_SUPPORT
   sound_queue(SILENT, 2000);  // short silence after pixel twinkling.
   play_jingle(JINGLE_RACING);
   sound_queue(SILENT, 3000);  // short silence between jingles.
@@ -1806,6 +1829,7 @@ int main(void)
   sound_queue(SILENT, 3000);
   play_jingle(JINGLE_FETE);
   sound_queue(SILENT, 3000);
+#endif
 
 
 
@@ -4261,6 +4285,7 @@ void pixel_twinkling(UINT16 Seconds)
 
 
   /* Make sure sounds do not begin before pixel twinkling. */
+#ifdef PASSIVE_PIEZO_SUPPORT
   sound_queue(SILENT, 350);
 
 
@@ -4273,6 +4298,7 @@ void pixel_twinkling(UINT16 Seconds)
     if (sound_queue(Frequency, 50) == MAX_SOUND_QUEUE)
       break;
   }
+#endif
 
 
   StartTime = time_us_64();
@@ -5770,11 +5796,13 @@ void process_scroll_queue(void)
           }
         break;
 
+#ifdef BME280_SUPPORT
         case (TAG_BME280_DEVICE_ID):
           Dum1UInt8 = bme280_read_device_id();
           sprintf(String, "BME280 device ID: 0x%2.2X", Dum1UInt8);
           scroll_string(24, String);
         break;
+#endif
 
         case (TAG_DATE):
           /* Used to scroll the date on clock display. */
@@ -5850,6 +5878,7 @@ void process_scroll_queue(void)
                             from BME280 installed by user
                and scroll them on clock display only if no error while reading.
           \* -------------------------------------------------------------------- */
+#ifdef BME280_EXT_SUPPORT
           if (bme280_get_temp() == 0)
           {
             // Build-up the string to be scrolled, first with temperature...
@@ -5902,6 +5931,7 @@ void process_scroll_queue(void)
             uart_send(uart1, __LINE__, "\r\r");
           }
           scroll_string(24, String);
+#endif
           /* ------------------------- END OF BLOCK ---------------------------- */
           
 
@@ -5911,7 +5941,8 @@ void process_scroll_queue(void)
                     Read outside relative humidity and temperature
                     from DHT22 installed by user and display them
                        only if no error in the reading process.
-           *** --------------------------------------------------------------- ***
+          \* ------------------------------------------------------------------- */
+#ifdef DHT22_EXT_SUPPORT
           if (read_dht22(&Temperature, &Humidity) == 0)
           {
             // Build-up the string to be scrolled, first with temperature...
@@ -5955,6 +5986,7 @@ void process_scroll_queue(void)
           // For statistic purposes, display the cumulative number of errors while reading DHT data.
           sprintf(String, " (%llu/%llu)", DhtErrors, DhtReadings);
           scroll_string(24, String);
+#endif
           /* ------------------------- END OF BLOCK ---------------------------- */
         break;
 
@@ -6016,7 +6048,8 @@ void process_scroll_queue(void)
                              FROM DS3231 REAL-TIME CLOCK IC
                   Read ambient temperature from DS3231 real-time clock ic
                            integrated in the Pico Green Clock 
-           * ------------------------------------------------------------------ *
+           \* ------------------------------------------------------------------ */
+#ifdef DS3231_SUPPORT
           get_ambient_temperature();  // read ambient temperature from DS3231.
 
           // Write temperature to the string to be displayed...
@@ -6038,7 +6071,8 @@ void process_scroll_queue(void)
             String[Dum1UInt8 + 1] = (UCHAR)0x00;  // end-of-string.
           }
           scroll_string(24, String);
-          * ------------------------ END OF BLOCK ---------------------------- */
+#endif
+          /* ------------------------ END OF BLOCK ---------------------------- */
 
 
 
@@ -6048,6 +6082,7 @@ void process_scroll_queue(void)
                     from DHT22 installed by user and display them
                        only if no error in the reading process.
           \* ------------------------------------------------------------------ */
+#ifdef DHT22_SUPPORT
           if (read_dht22(&Temperature, &Humidity) == 0)
           {
             // Build-up the string to be scrolled, first with temperature...
@@ -6070,6 +6105,7 @@ void process_scroll_queue(void)
           // For statistic purposes, display the cumulative number of errors while reading DHT data.
           sprintf(String, " (%llu/%llu)", DhtErrors, DhtReadings);
           scroll_string(24, String);
+#endif
           /* ------------------------- END OF BLOCK ---------------------------- */
         break;
 
